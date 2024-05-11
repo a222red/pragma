@@ -1,0 +1,8 @@
+fn swapDigits(num: uint) -> uint = {
+    let ones: uint = num % 10u;
+    let tens: uint = num / 10u;
+
+    10u * ones + tens
+};
+
+fn foo(x: uint, y: uint) -> uint = swapDigits(x) + swapDigits(y);
