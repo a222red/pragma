@@ -9,7 +9,7 @@ use std::fs::read_to_string;
 use crate::error::{report_parse_error, report_error};
 
 fn main() {
-    let src = read_to_string("test").unwrap();
+    let src = read_to_string("test.pr").unwrap();
 
     let mut ast = parser::all(&src)
         .unwrap_or_else(|e| report_parse_error(
@@ -45,3 +45,4 @@ fn main() {
         ])
     );
 }
+
