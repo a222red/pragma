@@ -248,6 +248,23 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
 
                 Type::Class(true, class.clone())
             },
+            ExprKind::ArrayConstruct(elems) => {
+                if elems.is_empty() {
+                    todo!()
+                } else {
+                    if elems[0].ty.is_none() {
+                        self.resolve_type(&mut elems[0])?;
+                    }
+
+                    let ty = elems[0].ty.clone().unwrap();
+
+                    for el in &mut elems[1..] {
+                        self.assert_types_match(&ty, el)?;
+                    }
+                    
+                    Type::Array(true, Box::new(ty))
+                }
+            },
             ExprKind::GetVar(var) =>
                 self.stage.var_stack.iter().rev()
                     .find_map(|(it, m)| if &it.name == var {
@@ -292,6 +309,24 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
                         kind: ErrorKind::FieldNotInClass(f.clone(), class.clone())
                     })?
             },
+            ExprKind::Index(arr, idx) => {
+                if arr.ty.is_none() {
+                    self.resolve_type(arr)?;
+                }
+
+                let Type::Array(is_mut, ty) = arr.ty.as_ref().unwrap() else {
+                    return Err(Error {
+                        at: ex.span,
+                        kind: ErrorKind::NotAnArray(ex.ty.clone().unwrap())
+                    });
+                };
+
+                self.assert_types_match(&Type::Uint, idx)?;
+                
+                ex.is_mut = *is_mut;
+
+                (**ty).clone()
+            }
             ExprKind::Try(e) => {
                 if e.ty.is_none() {
                     self.resolve_type(&mut *e)?;
@@ -687,6 +722,12 @@ impl<'a> Lower<'a, GenerateIr> {
                 
                 Some(Place::Field(idx))
             },
+            ExprKind::Index(arr, idx) => {
+                self.lower_and_load(arr, to);
+                self.lower_and_load(idx, to);
+
+                Some(Place::Index)
+            },
             ExprKind::If(cond, t, e) => {
                 self.lower_and_load(cond, to);
 
@@ -736,6 +777,15 @@ impl<'a> Lower<'a, GenerateIr> {
 
                 to.push(ir::Op::ConstructObject(class.len() as u32));
 
+                None
+            },
+            ExprKind::ArrayConstruct(elems) => {
+                for elem in elems {
+                    self.lower_and_load(elem, to);
+                }
+
+                to.push(ir::Op::ConstructArray(elems.len() as u32));
+                
                 None
             },
             ExprKind::Block(body, tail) => {

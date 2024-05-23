@@ -161,8 +161,10 @@ pub enum ExprKind {
     IntLiteral(i32),
     UintLiteral(u32),
     ClassConstruct(String, Vec<(String, Expr)>),
+    ArrayConstruct(Vec<Expr>),
     GetVar(String),
     FieldAccess(Box<Expr>, String),
+    Index(Box<Expr>, Box<Expr>),
     Arithmetic(ArithmeticOp, Box<Expr>, Box<Expr>),
     Comparison(Comparison, Box<Expr>, Box<Expr>),
     Logical(Logical, Box<Expr>, Box<Expr>),
@@ -191,6 +193,7 @@ impl Debug for ExprKind {
 
                 builder.finish()
             },
+            Self::ArrayConstruct(elems) => write!(f, "Array{:#?}", elems),
             Self::GetVar(n) => write!(f, "GetVar({})", n),
             Self::FieldAccess(e, n) => write!(
                 f,
@@ -198,6 +201,7 @@ impl Debug for ExprKind {
                 e,
                 n
             ),
+            Self::Index(arr, idx) => write!(f, "Index({:#?}, {:#?})", arr, idx),
             Self::Arithmetic(op, l, r) => {
                 f.debug_tuple(&format!("Arithmetic<{:?}>", op))
                     .field(&l)

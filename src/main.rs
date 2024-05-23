@@ -39,10 +39,7 @@ fn main() {
     dbg!(&interp);
 
     dbg!(
-        interp.invoke_function("foo", vec![
-            ir::Value::Uint(32),
-            ir::Value::Uint(91)
-        ])
+        interp.invoke_function("main", vec![])
     );
 }
 

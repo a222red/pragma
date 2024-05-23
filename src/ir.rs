@@ -110,6 +110,16 @@ impl Vm {
 
                     self.stack.push(Value::Object(fields));
                 },
+                Op::ConstructArray(n) => {
+                    let arr = vec![RefCell::new(Value::Unit); *n as usize];
+
+                    for i in 0..*n {
+                        *arr[(*n - 1 - i) as usize].borrow_mut() =
+                            self.stack.pop().unwrap();
+                    }
+
+                    self.stack.push(Value::Array(Arc::new(RefCell::new(arr))));
+                },
                 Op::LoadField(i) => {
                     let Value::Object(fields) = self.stack.pop().unwrap() else {
                         panic!("Not an object");
@@ -125,6 +135,27 @@ impl Vm {
                     };
 
                     *fields[*i as usize].borrow_mut() = value;
+                },
+                Op::LoadIndex => {
+                    let Value::Uint(idx) = self.stack.pop().unwrap() else {
+                        unimplemented!()
+                    };
+                    let Value::Array(arr) = self.stack.pop().unwrap() else {
+                        unimplemented!();
+                    };
+
+                    self.stack.push(arr.borrow()[idx as usize].borrow().clone());
+                },
+                Op::StoreIndex => {
+                    let value = self.stack.pop().unwrap();
+                    let Value::Uint(idx) = self.stack.pop().unwrap() else {
+                        unimplemented!()
+                    };
+                    let Value::Array(arr) = self.stack.pop().unwrap() else {
+                        unimplemented!();
+                    };
+
+                    *arr.borrow_mut()[idx as usize].borrow_mut() = value;
                 },
                 Op::CreateLocal => {
                     self.locals.push(self.stack.pop().unwrap());
@@ -489,7 +520,7 @@ pub enum Value {
     Object(Arc<[RefCell<Value>]>),
     Option(Ref<Option<Value>>),
     Result(Ref<Result<Value, Value>>),
-    Array(Ref<Vec<Value>>),
+    Array(Ref<Vec<RefCell<Value>>>),
     Function(u32)
 }
 

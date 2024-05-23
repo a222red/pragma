@@ -229,10 +229,14 @@ peg::parser! {
             ) }
             --
             x:@ s0() "("
-                s0() a:expr() ** s0() s0()
+                s0() a:expr() ** (s0() "," s0()) s0()
             ")" e:position!() { Expr::new(
                 Span::new(x.span.begin, e),
                 ExprKind::Call(Box::new(x), a)
+            ) }
+            a:@ s0() "[" s0() i:expr() "]" e:position!() { Expr::new(
+                Span::new(a.span.begin, e),
+                ExprKind::Index(Box::new(a), Box::new(i))
             ) }
             --
             t:spanned(<"true">) { Expr::new(
@@ -248,6 +252,12 @@ peg::parser! {
             s0() "}" e:position!() { Expr::new(
                 Span::new(b, e),
                 ExprKind::ClassConstruct(c, f)
+            ) }
+            b:position!() "[" s0()
+                x:expr() ** (s0() "," s0())
+            s0() "]" e:position!() { Expr::new(
+                Span::new(b, e),
+                ExprKind::ArrayConstruct(x)
             ) }
             v:spanned(<ident()>) { Expr::new(
                 v.1,

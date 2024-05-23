@@ -55,6 +55,9 @@ pub fn report_error(file_text: &str, file_name: &str, err: Error) -> ! {
         ErrorKind::NotAClass(t) => {
             eprintln!("Type '{:?}' is not a class", t);
         },
+        ErrorKind::NotAnArray(t) => {
+            eprintln!("Can't index into non-array type '{:?}'", t);
+        },
         ErrorKind::FieldNotInClass(f, c) => {
             eprintln!("No field '{}' in class '{}'", f, c);
         },
@@ -123,6 +126,7 @@ pub enum ErrorKind {
     NotAFunction(Type),
     WrongNumberArgs(usize, usize),
     NotAClass(Type),
+    NotAnArray(Type),
     FieldNotInClass(String, String),
     FieldNotInitialized(String),
     FieldReInitialized(String),
