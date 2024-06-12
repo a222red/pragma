@@ -1,8 +1,6 @@
-fn main() -> [int] = {
-    let arr: mut [int] = [1, 2, 3, 4];
-
-    arr[2u] = 0;
-
-    arr
+fn main() -> int = {
+    let x: int = 4;
+    let y = 2 + x;
+    y
 };
 

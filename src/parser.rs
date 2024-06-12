@@ -2,9 +2,10 @@ use crate::ast::*;
 
 pub use self::global::*;
 
-static RESERVED_WORDS: [&'static str; 13] = [
+static RESERVED_WORDS: [&'static str; 14] = [
     "fn",
     "let",
+    "var",
     "mut",
     "return",
     "if",
@@ -68,15 +69,17 @@ peg::parser! {
                 "return" s1() e:expr() {
                     StmtKind::Return(e)
                 }
-                / "let" s1() n:ident() s0() ":" s0() t:ty() s0() "=" s0() e:expr() {
+                / "let" s1() n:ident() s0()
+                    t:(":" s0() t:ty() s0() { t })? "=" s0() e:expr() {
                     StmtKind::Let(
                         n,
                         t,
                         e
                     )
                 }
-                / "let" s1() "mut" s1() n:ident() s0() ":" s0() t:ty() s0() "=" s0() e:expr() {
-                    StmtKind::LetMut(
+                / "var" s1() n:ident() s0()
+                    t:(":" s0() t:ty() s0() { t })? "=" s0() e:expr() {
+                    StmtKind::Var(
                         n,
                         t,
                         e

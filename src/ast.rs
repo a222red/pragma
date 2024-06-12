@@ -101,8 +101,8 @@ impl Stmt {
 pub enum StmtKind {
     Expr(Expr),
     Return(Expr),
-    Let(String, Type, Expr),
-    LetMut(String, Type, Expr),
+    Var(String, Option<Type>, Expr),
+    Let(String, Option<Type>, Expr),
     Assign(Expr, Expr)
 }
 
@@ -118,9 +118,9 @@ impl Debug for StmtKind {
                 t,
                 e
             ),
-            Self::LetMut(n, t, e) => write!(
+            Self::Var(n, t, e) => write!(
                 f,
-                "let mut {}: {:?} = {:#?}",
+                "var {}: {:?} = {:#?}",
                 n,
                 t,
                 e

@@ -544,7 +544,16 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
                 }
             },
             StmtKind::Let(i, t, e) => {
-                self.assert_types_match(&*t, e)?;
+                let t = match t {
+                    Some(t) => {
+                        self.assert_types_match(&*t, e)?;
+                        t
+                    },
+                    None => {
+                        self.resolve_type(e)?;
+                        e.ty.as_mut().unwrap()
+                    }
+                };
 
                 self.stage.var_stack.push((IdentType {
                     span: st.span,
@@ -554,8 +563,17 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
 
                 self.stage.locals_in_frame += 1;
             },
-            StmtKind::LetMut(i, t, e) => {
-                self.assert_types_match(&*t, e)?;
+            StmtKind::Var(i, t, e) => {
+                let t = match t {
+                    Some(t) => {
+                        self.assert_types_match(&*t, e)?;
+                        t
+                    },
+                    None => {
+                        self.resolve_type(e)?;
+                        e.ty.as_mut().unwrap()
+                    }
+                };
 
                 self.stage.var_stack.push((IdentType {
                     span: st.span,
@@ -861,15 +879,15 @@ impl<'a> Lower<'a, GenerateIr> {
                 self.lower_and_load(val, to);
                 self.store(&place, to);
             },
-            StmtKind::Let(name, ty, val)
-                | StmtKind::LetMut(name, ty, val) => {
+            StmtKind::Let(name, _, val)
+                | StmtKind::Var(name, _, val) => {
                     self.lower_and_load(val, to);
                     to.push(ir::Op::CreateLocal);
 
                     self.stage.var_stack.push(IdentType {
                         span: stmt.span,
                         name: name.clone(),
-                        ty: ty.clone()
+                        ty: val.ty.clone().unwrap()
                     });
                     self.stage.locals_in_frame += 1;
                 },
