@@ -46,6 +46,9 @@ pub fn report_error(file_text: &str, file_name: &str, err: Error) -> ! {
         ErrorKind::TypeMismatch(e, f) => {
             eprintln!("Expected '{:?}', got '{:?}'", e, f);
         },
+        ErrorKind::CantInferType => {
+            eprintln!("Can't infer the type of this expression");
+        },
         ErrorKind::NotAFunction(t) => {
             eprintln!("Type '{:?}' isn't a function type", t);
         },
@@ -123,6 +126,7 @@ pub struct Error {
 pub enum ErrorKind {
     UndefinedSymbol(String),
     TypeMismatch(Type, Type),
+    CantInferType,
     NotAFunction(Type),
     WrongNumberArgs(usize, usize),
     NotAClass(Type),

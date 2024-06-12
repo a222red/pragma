@@ -1,6 +1,11 @@
-fn main() -> int = {
-    let x: int = 4;
-    let y = 2 + x;
-    y
-};
+fn main() -> [uint] = [
+    fib(0),
+    fib(1),
+    fib(2),
+    fib(3),
+    fib(4),
+    fib(5)
+];
+
+fn fib(n: uint) -> uint = if n < 2 then n else fib(n - 2) + fib(n - 1);
 

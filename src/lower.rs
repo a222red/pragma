@@ -171,7 +171,7 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
         ex: &mut Expr
     ) -> Result<(), Error> {
         if ex.ty.is_none() {
-            self.resolve_type(ex)?;
+            self.resolve_type(ex, Some(ty))?;
         }
 
         let found = ex.ty.as_ref().unwrap();
@@ -188,13 +188,17 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
 
     fn resolve_type(
         &mut self,
-        ex: &mut Expr
+        ex: &mut Expr,
+        expected_type: Option<&Type>
     ) -> Result<(), Error> {
         ex.ty = Some(match &mut ex.kind {
             ExprKind::Unit => Type::Unit,
             ExprKind::True => Type::Bool,
             ExprKind::False => Type::Bool,
-            ExprKind::IntLiteral(_) => Type::Int,
+            ExprKind::IntLiteral(i) => match expected_type {
+                Some(Type::Uint) if *i >= 0 => Type::Uint,
+                _ => Type::Int
+            },
             ExprKind::UintLiteral(_) => Type::Uint,
             ExprKind::ClassConstruct(class, fields) => {
                 let mut fields_init: Vec<_> = self.classes.get(class)
@@ -250,10 +254,20 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
             },
             ExprKind::ArrayConstruct(elems) => {
                 if elems.is_empty() {
-                    todo!()
+                    match expected_type {
+                        Some(t@Type::Array(_, _)) => t.clone(),
+                        _ => return Err(Error {
+                            at: ex.span,
+                            kind: ErrorKind::CantInferType
+                        })
+                    }
                 } else {
+                    let expect = if let Some(Type::Array(_, t)) = expected_type {
+                        Some(t.as_ref())
+                    } else { None };
+
                     if elems[0].ty.is_none() {
-                        self.resolve_type(&mut elems[0])?;
+                        self.resolve_type(&mut elems[0], expect)?;
                     }
 
                     let ty = elems[0].ty.clone().unwrap();
@@ -279,7 +293,7 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
                     })?,
             ExprKind::FieldAccess(l, f) => {
                 if l.ty.is_none() {
-                    self.resolve_type(&mut *l)?;
+                    self.resolve_type(&mut *l, None)?;
                 }
 
                 let ty = l.ty.as_ref().unwrap();
@@ -311,7 +325,7 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
             },
             ExprKind::Index(arr, idx) => {
                 if arr.ty.is_none() {
-                    self.resolve_type(arr)?;
+                    self.resolve_type(arr, None)?;
                 }
 
                 let Type::Array(is_mut, ty) = arr.ty.as_ref().unwrap() else {
@@ -329,7 +343,7 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
             }
             ExprKind::Try(e) => {
                 if e.ty.is_none() {
-                    self.resolve_type(&mut *e)?;
+                    self.resolve_type(&mut *e, None)?;
                 }
                 
                 let t = match e.ty.as_ref().unwrap() {
@@ -371,14 +385,10 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
             },
             ExprKind::Arithmetic(_, l, r) => {
                 if l.ty.is_none() {
-                    self.resolve_type(&mut *l)?;
-                }
-                if r.ty.is_none() {
-                    self.resolve_type(&mut *r)?;
+                    self.resolve_type(&mut *l, expected_type)?;
                 }
 
                 let lt = l.ty.as_ref().unwrap();
-                let rt = r.ty.as_ref().unwrap();
 
                 match lt {
                     Type::Int | Type::Uint => (),
@@ -388,18 +398,13 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
                     })
                 }
 
-                if lt != rt {
-                    return Err(Error {
-                        at: r.span,
-                        kind: ErrorKind::TypeMismatch(lt.clone(), rt.clone())
-                    });
-                }
+                self.assert_types_match(lt, r)?;
 
                 lt.clone()
             },
             ExprKind::Comparison(_, l, r) => {
                 if l.ty.is_none() {
-                    self.resolve_type(&mut *l)?;
+                    self.resolve_type(&mut *l, expected_type)?;
                 }
 
                 let lt = l.ty.as_ref().unwrap();
@@ -417,18 +422,9 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
                 Type::Bool
             },
             ExprKind::Logical(_, l, r) => {
-                if l.ty.is_none() {
-                    self.resolve_type(&mut *l)?;
-                }
+                self.assert_types_match(&Type::Bool, l)?;
 
                 let lt = l.ty.as_ref().unwrap();
-
-                if lt != &Type::Bool {
-                    return Err(Error {
-                        at: l.span,
-                        kind: ErrorKind::TypeMismatch(Type::Bool, lt.clone())
-                    })
-                }
 
                 self.assert_types_match(lt, r)?;
 
@@ -438,7 +434,7 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
                 self.assert_types_match(&Type::Bool, c)?;
                 
                 if t.ty.is_none() {
-                    self.resolve_type(&mut *t)?;
+                    self.resolve_type(&mut *t, expected_type)?;
                 }
 
                 let tt = t.ty.as_ref().unwrap();
@@ -460,7 +456,7 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
                 let ty = match tail {
                     Some(e) => {
                         if e.ty.is_none() {
-                            self.resolve_type(&mut *e)?;
+                            self.resolve_type(&mut *e, expected_type)?;
                         }
 
                         e.ty.clone().unwrap()
@@ -478,7 +474,7 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
             },
             ExprKind::Call(callee, args) => {
                 if callee.ty.is_none() {
-                    self.resolve_type(&mut *callee)?;
+                    self.resolve_type(&mut *callee, None)?;
                 }
 
                 let Type::Fn(
@@ -540,7 +536,7 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
             },
             StmtKind::Expr(e) => {
                 if e.ty.is_none() {
-                    self.resolve_type(e)?;
+                    self.resolve_type(e, None)?;
                 }
             },
             StmtKind::Let(i, t, e) => {
@@ -550,7 +546,7 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
                         t
                     },
                     None => {
-                        self.resolve_type(e)?;
+                        self.resolve_type(e, None)?;
                         e.ty.as_mut().unwrap()
                     }
                 };
@@ -570,7 +566,7 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
                         t
                     },
                     None => {
-                        self.resolve_type(e)?;
+                        self.resolve_type(e, None)?;
                         e.ty.as_mut().unwrap()
                     }
                 };
@@ -585,7 +581,7 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
             },
             StmtKind::Assign(l, r) => {
                 if l.ty.is_none() {
-                    self.resolve_type(l)?;
+                    self.resolve_type(l, None)?;
                 }
 
                 if !l.is_mut {
@@ -662,7 +658,11 @@ impl<'a> Lower<'a, GenerateIr> {
                 None
             },
             ExprKind::IntLiteral(i) => {
-                to.push(ir::Op::ConstInt(*i));
+                to.push(match expr.ty {
+                    Some(Type::Int) => ir::Op::ConstInt(*i),
+                    Some(Type::Uint) => ir::Op::ConstUint(*i as u32),
+                    _ => unimplemented!()
+                });
                 None
             },
             ExprKind::UintLiteral(i) => {
