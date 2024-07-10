@@ -200,6 +200,7 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
                 _ => Type::Int
             },
             ExprKind::UintLiteral(_) => Type::Uint,
+            ExprKind::StringLiteral(_) => Type::String,
             ExprKind::ClassConstruct(class, fields) => {
                 let mut fields_init: Vec<_> = self.classes.get(class)
                     .ok_or_else(|| Error {
@@ -664,6 +665,9 @@ impl<'a> Lower<'a, GenerateIr> {
                     _ => unimplemented!()
                 });
                 None
+            },
+            ExprKind::StringLiteral(s) => {
+                todo!()
             },
             ExprKind::UintLiteral(i) => {
                 to.push(ir::Op::ConstUint(*i));

@@ -295,6 +295,10 @@ peg::parser! {
                 s.1,
                 ExprKind::Unit
             ) }
+            s:spanned(<string_literal()>) { Expr::new(
+                s.1,
+                ExprKind::StringLiteral(s.0)
+            ) }
         }
 
         rule int_literal() -> i32
@@ -311,5 +315,18 @@ peg::parser! {
                 if RESERVED_WORDS.contains(&i) { Err("ident") }
                 else { Ok(i.into()) }
             }
+
+        rule string_literal() -> String
+            = "\"" s:$((
+                [^ '"' | '\\']
+                / "\\" (
+                    ['\\' | '"' | 'a' | 'b' | 'f' | 'n'| 'r' | 't' | 'v']
+                    / "x" hex_digit() hex_digit()
+                )
+            )*) "\"" { s.into() }
+
+        rule hex_digit() -> char
+            = c:['0'..='9' | 'a'..='z' | 'A'..='Z']
     }
 }
+

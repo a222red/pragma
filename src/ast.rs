@@ -160,6 +160,7 @@ pub enum ExprKind {
     False,
     IntLiteral(i32),
     UintLiteral(u32),
+    StringLiteral(String),
     ClassConstruct(String, Vec<(String, Expr)>),
     ArrayConstruct(Vec<Expr>),
     GetVar(String),
@@ -182,6 +183,7 @@ impl Debug for ExprKind {
             Self::False => f.write_str("false"),
             Self::IntLiteral(i) => write!(f, "(int){}", i),
             Self::UintLiteral(i) => write!(f, "(uint){}", i),
+            Self::StringLiteral(s) => write!(f, "{:?}", s),
             Self::ClassConstruct(class, fields) => {
                 let mut builder = f.debug_struct(
                     &format!("new {}", class)
