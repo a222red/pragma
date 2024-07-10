@@ -1,10 +1,10 @@
 fn main() -> [uint] = [
-    fib(0),
-    fib(1),
-    fib(2),
-    fib(3),
-    fib(4),
-    fib(5)
+    fib(0x0),
+    fib(0x1),
+    fib(0x2),
+    fib(0x3),
+    fib(0x4),
+    fib(0x5)
 ];
 
 fn fib(n: uint) -> uint = if n < 2 then n else fib(n - 2) + fib(n - 1);

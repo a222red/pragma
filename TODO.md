@@ -1,5 +1,4 @@
 ## Todo Features:
-- Hexadecimal int literals
 - String literals
 - String operations
 - Array push/pop/concat

@@ -303,9 +303,13 @@ peg::parser! {
 
         rule int_literal() -> i32
             = n:$("-"? ['0'..='9']+) {? n.parse().or(Err("int")) }
+            / ("0x" / "0X") n:$(hex_digit()+)
+                {? i32::from_str_radix(n, 16).or(Err("int")) }
 
         rule uint_literal() -> u32
             = n:$(['0'..='9']+) "u" {? n.parse().or(Err("uint")) }
+            / ("0x" / "0X") n:$(hex_digit()+)
+                {? u32::from_str_radix(n, 16).or(Err("int")) }
         
         rule ident() -> String
             = i:$(
