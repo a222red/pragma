@@ -3,13 +3,6 @@
 version = 3
 
 [[package]]
-name = "my-project"
-version = "0.1.0"
-dependencies = [
- "peg",
-]
-
-[[package]]
 name = "peg"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -35,6 +28,13 @@ name = "peg-runtime"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "36bae92c60fa2398ce4678b98b2c4b5a7c61099961ca1fa305aec04a9ad28922"
+
+[[package]]
+name = "pragma"
+version = "0.1.0"
+dependencies = [
+ "peg",
+]
 
 [[package]]
 name = "proc-macro2"

@@ -8,6 +8,7 @@ pub struct Interpreter {
 
 #[derive(Debug)]
 struct Vm {
+    strings: Vec<String>,
     globals: Vec<Vec<Value>>,
     locals: Vec<Value>,
     stack: Vec<Value>,
@@ -19,6 +20,7 @@ impl Interpreter {
         Self {
             functions: Vec::new(),
             vm: Vm {
+                strings: Vec::new(),
                 globals: Vec::new(),
                 locals: Vec::new(),
                 stack: Vec::new(),
@@ -41,6 +43,15 @@ impl Interpreter {
 
     pub fn set_global(&mut self, ns: u32, id: u32, value: Value) {
         self.vm.globals[ns as usize][id as usize] = value;
+    }
+
+    pub fn add_string(&mut self, string: String) -> u32 {
+        if let Some(i) = self.vm.strings.iter().enumerate().find_map(
+            |(i, s)| if s == &string { Some(i as u32) } else { None }
+        ) { i } else {
+            self.vm.strings.push(string);
+            self.vm.strings.len() as u32 - 1
+        }
     }
 
     pub fn invoke_function(
@@ -93,11 +104,19 @@ impl Vm {
 
         loop {
             match &func.code[ip as usize] {
+                Op::Pop => {
+                    self.stack.pop();
+                },
                 Op::ConstUnit => self.stack.push(Value::Unit),
                 Op::ConstFalse => self.stack.push(Value::Bool(false)),
                 Op::ConstTrue => self.stack.push(Value::Bool(true)),
                 Op::ConstInt(i) => self.stack.push(Value::Int(*i)),
                 Op::ConstUint(u) => self.stack.push(Value::Uint(*u)),
+                Op::ConstString(s) => self.stack.push(Value::String(
+                    Arc::new(RefCell::new(
+                        self.strings[*s as usize].clone()
+                    ))
+                )),
                 Op::ConstructObject(n) => {
                     let fields: Arc<[RefCell<Value>]> = vec![
                         RefCell::new(Value::Unit); *n as usize
@@ -493,8 +512,7 @@ impl Vm {
                         },
                         _ => unimplemented!()
                     }
-                },
-                _ => todo!()
+                }
             }
 
             ip += 1;

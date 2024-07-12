@@ -25,6 +25,7 @@ pub struct CheckFunctionBodies {
 }
 
 pub struct GenerateIr {
+    string_literals: HashMap<String, u32>,
     var_stack: Vec<IdentType>,
     locals_in_frame: usize
 }
@@ -156,6 +157,7 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
 
         return Ok(Lower {
             stage: GenerateIr {
+                string_literals: HashMap::new(),
                 var_stack: Vec::new(),
                 locals_in_frame: 0
             },
@@ -610,6 +612,8 @@ impl<'a> Lower<'a, GenerateIr> {
 
         for global in ast {
             if let Global::Function(ast_func) = global {
+                self.add_strings_in_expr(&ast_func.body, vm);
+
                 let mut ir_func = self.generate_func(ast_func);
                 ir_func.globals_namespace = ns_id;
 
@@ -619,6 +623,85 @@ impl<'a> Lower<'a, GenerateIr> {
                     .get(&ast_func.signature.name).unwrap().1;
 
                 vm.set_global(ns_id, global_id, ir::Value::Function(func_id));
+            }
+        }
+    }
+
+    pub fn add_strings_in_expr(
+        &mut self,
+        expr: &Expr,
+        vm: &mut ir::Interpreter
+    ) {
+        match &expr.kind {
+            ExprKind::If(i, t, e) => {
+                self.add_strings_in_expr(&i, vm);
+                self.add_strings_in_expr(&t, vm);
+                if let Some(e) = e {
+                    self.add_strings_in_expr(&e, vm);
+                }
+            },
+            ExprKind::Try(p) => self.add_strings_in_expr(&p, vm),
+            ExprKind::Call(callee, args) => {
+                self.add_strings_in_expr(&callee, vm);
+                for arg in args {
+                    self.add_strings_in_expr(&arg, vm);
+                }
+            },
+            ExprKind::Index(a, i) => {
+                self.add_strings_in_expr(&a, vm);
+                self.add_strings_in_expr(&i, vm);
+            },
+            ExprKind::Block(body, tail) => {
+                for stmt in body {
+                    self.add_strings_in_stmt(&stmt, vm);
+                }
+
+                if let Some(tail) = tail {
+                    self.add_strings_in_expr(&tail, vm);
+                }
+            },
+            ExprKind::Logical(_, l, r)
+                | ExprKind::Arithmetic(_, l, r)
+                | ExprKind::Comparison(_, l, r) => {
+                    self.add_strings_in_expr(&l, vm);
+                    self.add_strings_in_expr(&r, vm);
+                },
+            ExprKind::FieldAccess(o, _) => self.add_strings_in_expr(&o, vm),
+            ExprKind::ClassConstruct(_, fields) => {
+                for (_, expr) in fields {
+                    self.add_strings_in_expr(&expr, vm);
+                }
+            },
+            ExprKind::ArrayConstruct(exprs) => {
+                for expr in exprs {
+                    self.add_strings_in_expr(&expr, vm);
+                }
+            },
+            ExprKind::StringLiteral(s) => {
+                if !self.stage.string_literals.contains_key(s) {
+                    let id = vm.add_string(s.clone());
+                    self.stage.string_literals.insert(s.clone(), id);
+                }
+            },
+            _ => ()
+        }
+    }
+
+    pub fn add_strings_in_stmt(
+        &mut self,
+        stmt: &Stmt,
+        vm: &mut ir::Interpreter
+    ) {
+        match &stmt.kind {
+            StmtKind::Var(_, _, e)
+                | StmtKind::Let(_, _, e)
+                | StmtKind::Expr(e)
+                | StmtKind::Return(e) => {
+                    self.add_strings_in_expr(&e, vm);
+                }, 
+            StmtKind::Assign(dst, src) => {
+                self.add_strings_in_expr(&dst, vm);
+                self.add_strings_in_expr(&src, vm);
             }
         }
     }
@@ -667,7 +750,10 @@ impl<'a> Lower<'a, GenerateIr> {
                 None
             },
             ExprKind::StringLiteral(s) => {
-                todo!()
+                to.push(ir::Op::ConstString(
+                    *self.stage.string_literals.get(s).unwrap()
+                ));
+                None
             },
             ExprKind::UintLiteral(i) => {
                 to.push(ir::Op::ConstUint(*i));
@@ -909,3 +995,4 @@ enum Place {
     Field(u32),
     Index
 }
+
