@@ -650,7 +650,7 @@ impl<'a> Lower<'a, GenerateIr> {
     pub fn generate_ir(mut self, vm: &mut vm::Interpreter) {
         let ast = self.ast.take().unwrap();
 
-        let ns_id = vm.add_namespace(self.globals.len());
+        let ns_id = vm.add_module(self.globals.len());
 
         for global in ast {
             if let Global::Function(ast_func) = global {

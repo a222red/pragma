@@ -4,55 +4,69 @@ use std::{cell::RefCell, sync::Arc};
 
 #[derive(Debug)]
 pub struct Interpreter {
-    functions: Vec<Function>,
-    vm: Vm
+    code: Code,
+    modules: Vec<Module>,
+    state: State
 }
 
 #[derive(Debug)]
-struct Vm {
-    strings: Vec<String>,
-    globals: Vec<Vec<Value>>,
-    locals: Vec<Value>,
+struct Code {
+    functions: Vec<Function>,
+    strings: Vec<String>
+}
+
+#[derive(Debug)]
+struct Module {
+    globals: Vec<Value>
+}
+
+#[derive(Debug)]
+struct State {
     stack: Vec<Value>,
-    current_namespace: u32
+    locals: Vec<Value>,
+    current_module: u32
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Self {
-            functions: Vec::new(),
-            vm: Vm {
-                strings: Vec::new(),
-                globals: Vec::new(),
-                locals: Vec::new(),
+            code: Code {
+                functions: Vec::new(),
+                strings: Vec::new()
+            },
+            modules: Vec::new(),
+            state: State {
                 stack: Vec::new(),
-                current_namespace: 0
+                locals: Vec::new(),
+                current_module: 0
             }
         }
     }
 
     pub fn add_function(&mut self, func: Function) -> u32 {
-        self.functions.push(func);
+        self.code.functions.push(func);
 
-        return self.functions.len() as u32 - 1;
+        return self.code.functions.len() as u32 - 1;
     }
 
-    pub fn add_namespace(&mut self, num_values: usize) -> u32 {
-        self.vm.globals.push(vec![Value::Unit; num_values]);
+    pub fn add_module(&mut self, num_values: usize) -> u32 {
+        self.modules.push(Module {
+            globals: vec![Value::Unit; num_values]
+        });
 
-        return self.vm.globals.len() as u32 - 1;
+        return self.modules.len() as u32 - 1;
     }
 
-    pub fn set_global(&mut self, ns: u32, id: u32, value: Value) {
-        self.vm.globals[ns as usize][id as usize] = value;
+    pub fn set_global(&mut self, mod_id: u32, id: u32, value: Value) {
+        self.modules[mod_id as usize].globals[id as usize] = value;
     }
 
     pub fn add_string(&mut self, string: String) -> u32 {
-        if let Some(i) = self.vm.strings.iter().enumerate().find_map(
+        if let Some(i) = self.code.strings.iter().enumerate().find_map(
             |(i, s)| if s == &string { Some(i as u32) } else { None }
         ) { i } else {
-            self.vm.strings.push(string);
-            self.vm.strings.len() as u32 - 1
+            self.code.strings.push(string);
+            self.code.strings.len() as u32 - 1
         }
     }
 
@@ -61,11 +75,11 @@ impl Interpreter {
         name: &str,
         stack: Vec<Value>
     ) -> Vec<Value> {
-        self.vm.stack = stack;
+        self.state.stack = stack;
 
         let mut func_id = None;
 
-        for (id, func) in self.functions.iter().enumerate() {
+        for (id, func) in self.code.functions.iter().enumerate() {
             if name == &func.name {
                 func_id = Some(id as u32);
             }
@@ -73,18 +87,18 @@ impl Interpreter {
 
         let func_id = func_id.unwrap();
 
-        self.vm.call_function(&self.functions, func_id);
+        self.state.call_function(&mut self.modules, &self.code, func_id);
 
-        return std::mem::replace(&mut self.vm.stack, Vec::new());
+        return std::mem::replace(&mut self.state.stack, Vec::new());
     }
 }
 
-impl Vm {
-    fn call_function(&mut self, functions: &[Function], id: u32) {
-        let func = &functions[id as usize];
+impl State {
+    fn call_function(&mut self, modules: &mut [Module], code: &Code, id: u32) {
+        let func = &code.functions[id as usize];
 
-        let last_namespace = self.current_namespace;
-        self.current_namespace = func.globals_namespace;
+        let last_namespace = self.current_module;
+        self.current_module = func.globals_namespace;
 
         for _ in 0..func.params {
             self.locals.push(Value::Unit);
@@ -95,12 +109,6 @@ impl Vm {
             self.locals[n - 1 - i as usize] = self.stack.pop().unwrap();
         }
 
-        // i really want to pull this out into its own function
-        // but that would cause borrow checker issues.
-        // ideally i should split the `VM` struct into separate structs
-        // for stack, globals, functions, etc.
-        // and then this could mutably borrow the stack and variables
-        // without mutably aliasing the code.
         let mut ip: usize = 0;
         let mut locals_in_frame = func.params as usize;
 
@@ -116,7 +124,7 @@ impl Vm {
                 Op::ConstUint(u) => self.stack.push(Value::Uint(*u)),
                 Op::ConstString(s) => self.stack.push(Value::String(
                     Arc::new(RefCell::new(
-                        self.strings[*s as usize].clone()
+                        code.strings[*s as usize].clone()
                     ))
                 )),
                 Op::ConstructObject(n) => {
@@ -201,16 +209,16 @@ impl Vm {
                 },
                 Op::LoadGlobal(i) => {
                     self.stack.push(
-                        self.globals[
-                            self.current_namespace as usize
-                        ][*i as usize].clone()
+                        modules[
+                            self.current_module as usize
+                        ].globals[*i as usize].clone()
                     );
                 },
                 Op::StoreGlobal(i) => {
                     let value = self.stack.pop().unwrap();
-                    self.globals[
-                        self.current_namespace as usize
-                    ][*i as usize] = value;
+                    modules[
+                        self.current_module as usize
+                    ].globals[*i as usize] = value;
                 },
                 Op::Add => {
                     let y = self.stack.pop().unwrap();
@@ -411,7 +419,7 @@ impl Vm {
                         unimplemented!()
                     };
 
-                    self.call_function(functions, f);
+                    self.call_function(modules, code, f);
                 },
                 Op::Ret => break,
                 Op::Try => {
@@ -524,7 +532,7 @@ impl Vm {
             self.locals.pop();
         }
 
-        self.current_namespace = last_namespace;
+        self.current_module = last_namespace;
     }
 }
 
