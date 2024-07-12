@@ -1,6 +1,8 @@
 use crate::{
     ast::*,
-    error::*, ir
+    error::*,
+    ir,
+    vm
 };
 
 use std::collections::HashMap;
@@ -645,7 +647,7 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
 }
 
 impl<'a> Lower<'a, GenerateIr> {
-    pub fn generate_ir(mut self, vm: &mut ir::Interpreter) {
+    pub fn generate_ir(mut self, vm: &mut vm::Interpreter) {
         let ast = self.ast.take().unwrap();
 
         let ns_id = vm.add_namespace(self.globals.len());
@@ -670,7 +672,7 @@ impl<'a> Lower<'a, GenerateIr> {
     pub fn add_strings_in_expr(
         &mut self,
         expr: &Expr,
-        vm: &mut ir::Interpreter
+        vm: &mut vm::Interpreter
     ) {
         match &expr.kind {
             ExprKind::If(i, t, e) => {
@@ -730,7 +732,7 @@ impl<'a> Lower<'a, GenerateIr> {
     pub fn add_strings_in_stmt(
         &mut self,
         stmt: &Stmt,
-        vm: &mut ir::Interpreter
+        vm: &mut vm::Interpreter
     ) {
         match &stmt.kind {
             StmtKind::Var(_, _, e)

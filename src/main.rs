@@ -3,6 +3,7 @@ mod ast;
 mod lower;
 mod error;
 mod ir;
+mod vm;
 
 use std::fs::read_to_string;
 
@@ -20,7 +21,7 @@ fn main() {
     
     dbg!(&ast);
 
-    let mut interp = ir::Interpreter::new();
+    let mut interp = vm::Interpreter::new();
 
     lower::lower(&mut ast)
         .resolve_globals()
