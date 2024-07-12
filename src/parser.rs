@@ -2,15 +2,19 @@ use crate::ast::*;
 
 pub use self::global::*;
 
-static RESERVED_WORDS: [&'static str; 14] = [
+static RESERVED_WORDS: [&'static str; 18] = [
     "fn",
     "let",
     "var",
     "mut",
     "return",
     "if",
+    "then",
     "else",
     "while",
+    "do",
+    "break",
+    "continue",
     "bool",
     "int",
     "uint",
@@ -66,7 +70,9 @@ peg::parser! {
         
         pub rule stmt() -> Stmt
             = k:spanned(<
-                "return" s1() e:expr() {
+                "break" { StmtKind::Break }
+                / "continue" { StmtKind::Continue}
+                / "return" s1() e:expr() {
                     StmtKind::Return(e)
                 }
                 / "let" s1() n:ident() s0()
@@ -89,6 +95,8 @@ peg::parser! {
                     StmtKind::Assign(l, r)
                 }
                 / e:expr() { StmtKind::Expr(e) }
+                / "while" s0() c:expr() s0() "do" b:expr()
+                    { StmtKind::While(c, b) }
             >) s0() ";" { Stmt::new(k.1, k.0) }
         
         pub rule ty() -> Type = precedence! {

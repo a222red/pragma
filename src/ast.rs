@@ -103,7 +103,10 @@ pub enum StmtKind {
     Return(Expr),
     Var(String, Option<Type>, Expr),
     Let(String, Option<Type>, Expr),
-    Assign(Expr, Expr)
+    Assign(Expr, Expr),
+    While(Expr, Expr),
+    Break,
+    Continue
 }
 
 impl Debug for StmtKind {
@@ -130,7 +133,15 @@ impl Debug for StmtKind {
                 "{:#?} = {:#?}",
                 l,
                 r
-            )
+            ),
+            Self::While(cond, body) => write!(
+                f,
+                "while {:#?} do {:#?}",
+                cond,
+                body
+            ),
+            Self::Break => write!(f, "break"),
+            Self::Continue => write!(f, "continue")
         }
     }
 }

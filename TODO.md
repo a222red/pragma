@@ -1,5 +1,4 @@
 ## Todo Features:
-- String literals
 - String operations
 - Array push/pop/concat
 - `while` loops
