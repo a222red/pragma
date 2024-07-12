@@ -85,6 +85,12 @@ pub fn report_error(file_text: &str, file_name: &str, err: Error) -> ! {
         },
         ErrorKind::AssignToImmutable => {
             eprintln!("Can't assign to immutable destination");
+        },
+        ErrorKind::BreakOutsideLoop => {
+            eprintln!("'break' can only be used within a loop");
+        },
+        ErrorKind::ContinueOutsideLoop => {
+            eprintln!("'continue' can only be used within a loop");
         }
     }
 
@@ -137,5 +143,7 @@ pub enum ErrorKind {
     TypeNotTryable(Type),
     TypeNotTryableIn(Type, Type),
     TypeNotScalar(Type),
-    AssignToImmutable
+    AssignToImmutable,
+    BreakOutsideLoop,
+    ContinueOutsideLoop
 }

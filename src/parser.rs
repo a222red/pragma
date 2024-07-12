@@ -95,7 +95,7 @@ peg::parser! {
                     StmtKind::Assign(l, r)
                 }
                 / e:expr() { StmtKind::Expr(e) }
-                / "while" s0() c:expr() s0() "do" b:expr()
+                / "while" s0() c:expr() s0() "do" s0() b:expr()
                     { StmtKind::While(c, b) }
             >) s0() ";" { Stmt::new(k.1, k.0) }
         

@@ -21,13 +21,23 @@ pub struct CheckGlobalSignatures;
 pub struct CheckFunctionBodies {
     var_stack: Vec<(IdentType, bool)>,
     locals_in_frame: usize,
-    return_type: Type
+    return_type: Type,
+    in_loop: bool
 }
 
 pub struct GenerateIr {
     string_literals: HashMap<String, u32>,
     var_stack: Vec<IdentType>,
-    locals_in_frame: usize
+    locals_in_frame: usize,
+    while_loop_context: Option<WhileLoopContext>
+}
+
+struct WhileLoopContext {
+    start_addr: u32,
+    jump_stubs: Vec<u32>,
+    /// Similar to `locals_in_frame`,
+    /// needed to destroy locals on `break` or `continue`
+    num_locals: usize
 }
 
 pub fn lower<'a>(ast: &'a mut [Global]) -> Lower<ResolveGlobals> {
@@ -100,7 +110,8 @@ impl<'a> Lower<'a, CheckGlobalSignatures> {
             stage: CheckFunctionBodies {
                 var_stack: Vec::new(),
                 locals_in_frame: 0,
-                return_type: Type::Unit
+                return_type: Type::Unit,
+                in_loop: false
             },
             ast: Some(ast),
             globals: self.globals,
@@ -159,7 +170,8 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
             stage: GenerateIr {
                 string_literals: HashMap::new(),
                 var_stack: Vec::new(),
-                locals_in_frame: 0
+                locals_in_frame: 0,
+                while_loop_context: None
             },
             ast: Some(ast),
             globals: self.globals,
@@ -597,6 +609,34 @@ impl<'a> Lower<'a, CheckFunctionBodies> {
                 let lt = l.ty.as_ref().unwrap();
 
                 self.assert_types_match(lt, r)?;
+            },
+            StmtKind::While(cond, body) => {
+                let old = self.stage.in_loop;
+                self.stage.in_loop = true;
+
+                self.assert_types_match(&Type::Bool, cond)?;
+
+                if body.ty.is_none() {
+                    self.resolve_type(body, None)?;
+                }
+
+                self.stage.in_loop = old;
+            },
+            StmtKind::Break => {
+                if !self.stage.in_loop {
+                    return Err(Error {
+                        at: st.span,
+                        kind: ErrorKind::BreakOutsideLoop
+                    });
+                }
+            },
+            StmtKind::Continue => {
+                if !self.stage.in_loop {
+                    return Err(Error {
+                        at: st.span,
+                        kind: ErrorKind::ContinueOutsideLoop
+                    });
+                }
             }
         }
 
@@ -703,6 +743,11 @@ impl<'a> Lower<'a, GenerateIr> {
                 self.add_strings_in_expr(&dst, vm);
                 self.add_strings_in_expr(&src, vm);
             }
+            StmtKind::While(cond, body) => {
+                self.add_strings_in_expr(&cond, vm);
+                self.add_strings_in_expr(&body, vm);
+            },
+            _ => ()
         }
     }
 
@@ -914,6 +959,14 @@ impl<'a> Lower<'a, GenerateIr> {
                     to.push(ir::Op::DestroyLocals(
                         self.stage.locals_in_frame as u32
                     ));
+
+                    for _ in 0..self.stage.locals_in_frame {
+                        self.stage.var_stack.pop();
+                    }
+                }
+
+                if let Some(cx) = self.stage.while_loop_context.as_mut() {
+                    cx.num_locals -= self.stage.locals_in_frame;
                 }
 
                 self.stage.locals_in_frame = tmp;
@@ -980,10 +1033,78 @@ impl<'a> Lower<'a, GenerateIr> {
                         ty: val.ty.clone().unwrap()
                     });
                     self.stage.locals_in_frame += 1;
+
+                    if let Some(cx) = self.stage.while_loop_context.as_mut() {
+                        cx.num_locals += 1;
+                    }
                 },
             StmtKind::Return(val) => {
                 self.lower_and_load(val, to);
                 to.push(ir::Op::Ret);
+            },
+            StmtKind::While(cond, body) => {
+                let start_addr: u32 = to.len() as _;
+                let prev_context = self.stage.while_loop_context.replace(
+                    WhileLoopContext {
+                        start_addr,
+                        jump_stubs: Vec::new(),
+                        num_locals: 0
+                    }
+                );
+
+                self.lower_and_load(cond, to);
+                self.stage.while_loop_context.as_mut().unwrap()
+                    .jump_stubs.push(to.len() as u32);
+                to.push(ir::Op::JumpIfFalse(0));
+
+                self.lower_and_load(body, to);
+                to.push(ir::Op::Pop);
+
+                to.push(ir::Op::Jump(start_addr as i32 - to.len() as i32));
+
+                let end_addr: u32 = to.len() as _;
+
+                for stub_addr in &self.stage.while_loop_context.as_ref()
+                    .unwrap().jump_stubs
+                {
+                    match to[*stub_addr as usize] {
+                        ir::Op::Jump(ref mut i)
+                            | ir::Op::JumpIfTrue(ref mut i)
+                            | ir::Op::JumpIfFalse(ref mut i)
+                            | ir::Op::JumpIfSome(ref mut i)
+                        => {
+                            *i = end_addr as i32 - *stub_addr as i32;
+                        },
+                        _ => unimplemented!()
+                    }
+                }
+
+                self.stage.while_loop_context = prev_context;
+            },
+            StmtKind::Break => {
+                let locals = self.stage.while_loop_context.as_ref()
+                    .unwrap().num_locals;
+
+                if locals > 0 {
+                    to.push(ir::Op::DestroyLocals(locals as u32));
+                }
+
+                self.stage.while_loop_context.as_mut().unwrap()
+                    .jump_stubs.push(to.len() as u32);
+                to.push(ir::Op::Jump(0));
+            },
+            StmtKind::Continue => {
+                let locals = self.stage.while_loop_context.as_ref()
+                    .unwrap().num_locals;
+
+                if locals > 0 {
+                    to.push(ir::Op::DestroyLocals(locals as u32));
+                }
+
+                let start_addr = self.stage.while_loop_context.as_ref()
+                    .unwrap().start_addr;
+
+                to.push(ir::Op::Jump(start_addr as i32 - to.len() as i32));
             }
         }
     }
